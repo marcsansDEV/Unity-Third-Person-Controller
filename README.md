@@ -1,85 +1,94 @@
-# Project Overview:
+# Unity Third Person Controller
 
-This project is a third-person player control system for a 3D game built using Unity and the Unity Input System. It includes multiple systems to handle complex player behaviors like movement, jumping, rolling, gliding, and state transitions. The code is structured into various components that manage the player’s actions and interactions with the environment, with a strong focus on flexibility and extensibility.
+A third-person player controller for Unity with walking, jumping, double jump, rolling and gliding. Movement is driven by a small finite state machine so each behavior is isolated and easy to swap or extend.
 
----
+Built on Unity's Input System and camera-relative movement, so the controls always feel right regardless of where the camera is looking.
 
-# Key Features:
+## Features
 
-## Player Movement System:
+- Camera-relative movement using Unity's Input System
+- Finite state machine for movement (Walk, Ball Run, Glide), each state owns its own speed, acceleration and gravity settings
+- Jump and double jump with ground detection
+- Roll state with its own movement profile
+- Glide state with reduced gravity for slow descents
+- UnityEvents on state enter and exit for hooking up animations, sounds or VFX without touching the controller code
 
-- **Walking, Rolling, and Gliding**: The player can walk, glide, and roll with distinct behaviors. Each movement type is managed through state transitions, ensuring that the player’s actions feel fluid and responsive.
-- **State Machine**: The movement is handled by a finite state machine (FSM), which allows the player to switch between states like Walking, Rolling, and Gliding based on input and conditions in the game.
-- **Input-driven Movement**: The player’s movement is driven by a combination of camera-relative movement (e.g., moving forward or strafing based on the camera's orientation) and input-based actions (e.g., jumping, rolling).
+## Requirements
 
-## Jumping and Double Jumping:
+- Unity 2022.3 LTS or newer
+- Input System package (com.unity.inputsystem)
+- A third-person camera in the scene (Cinemachine or any camera you drive yourself)
 
-- The player can jump and perform a second jump while in the air (double jump). The height and behavior of each jump can be customized, providing dynamic control over how the player interacts with gravity and obstacles.
+## Getting Started
 
-## Camera and Input Integration:
+1. Clone the repo and open the project in Unity
+2. Open the demo scene to see the controller in action
+3. To use it in your own project, copy the `Scripts/Player` folder and the input actions asset into your project
 
-- **Third-Person Camera**: The game’s camera is used to influence movement directions, allowing the player to move relative to where the camera is facing.
-- **Input Management**: The system uses Unity's Input System to read and process player inputs, enabling smooth and customizable controls for actions such as jumping, gliding, and rolling.
-- **Camera-Aware Movement**: The movement input is transformed into world-space coordinates, meaning the player’s controls feel intuitive relative to the camera's position (i.e., moving forward, backward, left, and right based on the camera’s perspective).
+The player prefab needs the following components on the same GameObject:
 
-## State-Driven Behavior:
+- `PlayerInputManager` reads the Input System actions and exposes them to the rest of the controller
+- `PlayerMoveFSM` runs the movement state machine
+- `PlayerJump` handles jump and double jump
+- `PlayerRotation` rotates the character based on camera and input
 
-- The player’s behavior (such as movement speed, acceleration, or gravity modifications) is dictated by the current state (e.g., Walking, Rolling, Gliding).
-- **State Transitions**: Transitions between states are based on player input, environmental conditions, and logic specified in the state machine (e.g., the player can enter or exit the Gliding state based on the glide button input or whether the player is in the air).
+Assign your main camera on `PlayerMoveFSM` so movement is transformed into world space correctly.
 
-## Modular and Expandable:
+## Adding a new movement state
 
-- **State Design**: Each action (like walking, gliding, etc.) is encapsulated in its own class (PlState, PlWalkState, PlGlideState, etc.), which allows for easy modification or addition of new states.
-- **Customizable Input Handling**: The input system can be easily extended to include more player actions such as sprinting, crouching, interacting with objects, etc.
+States inherit from `PlState`. Create a subclass, implement the movement behavior, and add it to the FSM.
 
-## Event System:
+```csharp
+public class PlSprintState : PlState
+{
+    public float SprintSpeed = 12f;
+    public float Acceleration = 40f;
 
-- The project uses Unity’s **UnityEvent** to trigger specific actions when entering or exiting states (e.g., triggering animations, sound effects, or additional logic during state transitions like jumping or landing).
+    public override void OnEnter() { /* setup */ }
+    public override void OnTick()
+    {
+        // read input, apply movement using SprintSpeed and Acceleration
+    }
+    public override void OnExit()  { /* cleanup */ }
+}
+```
 
----
+Wire the transition in `PlayerMoveFSM` (for example, enter sprint while walking and the sprint input is held, exit when the input is released).
 
-# Key Components:
+## How it works
 
-- **PlayerInputManager**: This component manages all player inputs, converting raw input values from the Unity Input System into actionable player movement and behavior (e.g., reading horizontal movement, glide, jump, etc.).
-- **PlayerMoveFSM**: The movement state machine component that switches between different movement states like Walking, Ball Run, and Gliding. It uses the input data and environmental feedback to calculate and apply movement forces on the player.
-- **PlayerJump**: This component handles the player's jumping logic, including regular and double jumps, while maintaining the ability to detect if the player is grounded or in the air.
-- **PlState and Derived Classes**: These base and derived classes (e.g., PlWalkState, PlGlideState) represent different movement states. They define behaviors like how the player moves, accelerates, or glides depending on the current state.
-- **PlayerRotation**: Manages how the player’s rotation is adjusted based on camera orientation and player input. This ensures the player always faces the right direction when moving or performing actions like rolling.
+`PlayerInputManager` reads Input System actions once per frame and stores the raw values (movement vector, jump pressed, glide held, etc). The other components read from it instead of talking to the Input System directly, which keeps things testable and easy to rebind.
 
----
+`PlayerMoveFSM` picks the active state based on input and context (grounded, in air, glide button held). Each `PlState` subclass defines its own movement, so switching between walking and gliding is just switching the active state. States expose UnityEvents for enter and exit so you can hook animation triggers or sound effects from the inspector.
 
-# Technical Details:
+`PlayerJump` runs alongside the FSM. It listens for jump input, checks if the player is grounded or has a double jump available, and applies the impulse.
 
-## State Machine Design:
+Movement input is always transformed relative to the camera, so pressing forward moves the character away from the camera regardless of where either is facing.
 
-A Finite State Machine (FSM) is used to control the player’s movement states. Each state (e.g., Walking, Gliding) defines specific behaviors (such as movement speed and gravity adjustments) and transitions (when the player can switch from one state to another).
+## Project structure
 
-- The FSM is built using a combination of abstract base classes (PlState) and specific implementations (e.g., PlWalkState, PlGlideState).
+```
+Assets/
+  Scripts/
+    Player/
+      Input/         PlayerInputManager and input actions
+      Movement/      PlayerMoveFSM, PlState, PlWalkState, PlBallRunState, PlGlideState
+      Jump/          PlayerJump
+      Rotation/      PlayerRotation
+  Scenes/
+    Demo.unity       Demo scene with the character and camera set up
+```
 
-## Input Handling:
+## Notes
 
-Unity's Input System is used to manage player input. The system is highly flexible and allows for easy remapping of controls and scaling the game for various input devices (e.g., keyboard, gamepad).
+- The FSM is intentionally simple. If you need something more complex (hierarchical states, visual editor, etc.), a dedicated FSM tool would fit better
+- Gravity is handled per state rather than globally, which means gliding and falling behave differently even though both are "in the air"
+- The controller assumes a `CharacterController` or `Rigidbody` on the player. Check the demo prefab to see which one is used
 
-- Input is transformed from 2D (screen space) to 3D world space, ensuring that movement and camera angles are always aligned properly.
+## License
 
-## Camera Integration:
+MIT. See `LICENSE` for details.
 
-The camera plays a key role in determining movement direction, especially in 3D space. The system reads the camera's orientation to calculate movement directions and adjust the player's position accordingly. This ensures a seamless third-person control experience.
+## Contact
 
-## Physics & Gravity Modulation:
-
-Gravity and velocity adjustments are handled based on the current state (e.g., gravity is reduced during gliding to allow for slow descent). Movement speed and acceleration can be customized per state, allowing for different behaviors (e.g., faster movement during a roll or slower during gliding).
-
----
-
-# Use Cases:
-
-- **3D Platformers**: This control system is perfect for 3D platforming games where the player needs to interact with the environment through jumping, gliding, and rolling.
-- **Adventure Games**: Ideal for third-person adventure games where the player navigates various terrains, jumps over obstacles, and switches between different movement styles.
-- **Action Games**: The system supports responsive and smooth character controls, essential for fast-paced action games involving complex movement mechanics.
-
----
-
-# Conclusion:
-
-This project provides a solid foundation for building a complex and dynamic player control system for a 3D game. By integrating Unity’s Input System, state-based movement logic, and camera-aware controls, it offers an intuitive and flexible system for handling player movement, jumping, gliding, and state transitions. The design is modular and scalable, allowing for easy extensions and adaptations for various gameplay mechanics.
+Marc Sans Cormenzana &middot; [LinkedIn](https://www.linkedin.com/in/marc-sans-cormzn) &middot; marcsans1212@gmail.com
